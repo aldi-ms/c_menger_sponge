@@ -1,6 +1,21 @@
+#define ARRAY_ELEMENTS 10000
+
 #include "include/raylib.h"
 #include <stdio.h>
 #include <stdlib.h>
+
+int PushNewCube(Vector3 pos, Model model, Vector3 positions[], Model models[],
+                unsigned long *idx) {
+  if (*idx + 1 >= ARRAY_ELEMENTS) {
+    return 1;
+  }
+
+  positions[*idx] = pos;
+  models[*idx] = model;
+  (*idx)++;
+
+  return 0;
+}
 
 int main(void) {
   // Initialization
@@ -27,11 +42,16 @@ int main(void) {
 
   short level = 0;
   short lvlStrLength = 9;
-
   float cubeSide = 2.0f;
-  Mesh cubeMesh = GenMeshCube(cubeSide, cubeSide, cubeSide);
-  Model cubeModel = LoadModelFromMesh(cubeMesh);
   char *levelInfo = "Level: 0";
+
+  unsigned long idx = 0;
+  Vector3 positions[ARRAY_ELEMENTS];
+  Model models[ARRAY_ELEMENTS];
+
+  Model cubeModel =
+      LoadModelFromMesh(GenMeshCube(cubeSide, cubeSide, cubeSide));
+  PushNewCube(cubePosition, cubeModel, positions, models, &idx);
 
   DisableCursor();
 
@@ -48,7 +68,7 @@ int main(void) {
       levelInfo = (char *)malloc(lvlStrLength * sizeof(char));
       lvlStrLength = snprintf(levelInfo, lvlStrLength + 1, "Level: %d", level);
 
-      //cubeSide = cubeSide / 3.0f;
+      // cubeSide = cubeSide / 3.0f;
     }
 
     // Draw
@@ -59,9 +79,11 @@ int main(void) {
 
     BeginMode3D(cam);
 
-    DrawModelEx(cubeModel, cubePosition, cubePosition, 0.0f, vectorOne, RED);
-    DrawModelWiresEx(cubeModel, cubePosition, cubePosition, 0.0f, vectorOne,
-                     BLACK);
+    for (int i = 0; i < idx; i++) {
+      DrawModelEx(models[i], positions[i], vectorZero, 0.0f, vectorOne, RED);
+      DrawModelWiresEx(models[i], positions[i], vectorZero, 0.0f, vectorOne,
+                       BLACK);
+    }
 
     DrawGrid(20, 1.0f);
 
@@ -78,8 +100,10 @@ int main(void) {
   // De-Initialization
   //--------------------------------------------------------------------------------------
 
-  UnloadModel(cubeModel);
-  UnloadMesh(cubeMesh);
+  for (int i = 0; i < idx; i++) {
+    UnloadModel(models[i]);
+  }
+
   free(levelInfo);
   CloseWindow(); // Close window and OpenGL context
   //--------------------------------------------------------------------------------------

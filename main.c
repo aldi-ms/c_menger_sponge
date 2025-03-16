@@ -1,19 +1,19 @@
+#include "include/raylib.h"
 #include <stdatomic.h>
 #include <stddef.h>
-#define ARRAY_ELEMENTS 10000
-
-#include "include/raylib.h"
 #include <stdio.h>
 #include <stdlib.h>
 
-int PushNewCube(Vector3 pos, Model model, Vector3 positions[], Model models[],
-                size_t *idx);
-int GetNextGenCubes(Vector3 positions[], Model models[], size_t *arrayLength,
+#define ARRAY_ELEMENTS 10000
+
+int PushNewCube(Vector3 pos, Model model, Vector3 positions[], Model models[],                size_t *idx);
+int GetNextGenCubes(Vector3 **positions, Model **models, size_t *arrayLength,
                     float nextCubeSize);
 
 int main(void) {
   setvbuf(stdout, NULL, _IOFBF, 0);
   setvbuf(stdin, NULL, _IOFBF, 0);
+  SetConfigFlags(FLAG_MSAA_4X_HINT);
   // Initialization
   //--------------------------------------------------------------------------------------
   const int screenWidth = 1024;
@@ -26,9 +26,9 @@ int main(void) {
   // TODO: Update your variables here
   //----------------------------------------------------------------------------------
 
-  const Vector3 cubePosition = {0.0f, 0.0f, 0.0f};
   const Vector3 vectorOne = (Vector3){1.0f, 1.0f, 1.0f};
   const Vector3 vectorZero = (Vector3){0.0f, 0.0f, 0.0f};
+  const Vector3 cubePosition = vectorZero;
   Camera3D cam = {0};
   cam.position = (Vector3){10.0f, 10.0f, 10.0f};
   cam.target = vectorZero;
@@ -38,12 +38,13 @@ int main(void) {
 
   short level = 0;
   short lvlStrLength = 9;
-  float cubeSide = 2.0f;
+  float cubeSide = 1.0f;
   char *levelInfo = "Level: 0";
 
   size_t idx = 0;
-  Vector3 positions[ARRAY_ELEMENTS];
-  Model models[ARRAY_ELEMENTS];
+
+  Vector3 *positions = malloc(ARRAY_ELEMENTS * sizeof(Vector3));
+  Model *models = malloc(ARRAY_ELEMENTS * sizeof(Model));
 
   Model cubeModel =
       LoadModelFromMesh(GenMeshCube(cubeSide, cubeSide, cubeSide));
@@ -66,7 +67,7 @@ int main(void) {
 
       cubeSide = cubeSide / 3.0f;
 
-      idx = GetNextGenCubes(positions, models, &idx, cubeSide);
+      idx = GetNextGenCubes(&positions, &models, &idx, cubeSide);
     }
 
     // Draw
@@ -78,6 +79,8 @@ int main(void) {
     BeginMode3D(cam);
 
     for (int i = 0; i < idx; i++) {
+      // printf("pos %d: %f:%f:%f \n", i, positions[i].x, positions[i].y,
+      // positions[i].z);
       DrawModelEx(models[i], positions[i], vectorZero, 0.0f, vectorOne, YELLOW);
       DrawModelWiresEx(models[i], positions[i], vectorZero, 0.0f, vectorOne,
                        BLACK);
@@ -122,38 +125,60 @@ int PushNewCube(Vector3 pos, Model model, Vector3 positions[], Model models[],
   return 0;
 }
 
-int GetNextGenCubes(Vector3 positions[], Model models[], size_t * arrayLength,
+int GetNextGenCubes(Vector3 **positions, Model **models, size_t *arrayLength,
                     float nextCubeSize) {
 
   size_t idx = 0;
 
+  Vector3 *nextPositions = malloc(ARRAY_ELEMENTS * sizeof(Vector3));
+  Model *nextModels = malloc(ARRAY_ELEMENTS * sizeof(Model));
+
   for (int i = 0; i < *arrayLength; i++) {
-    UnloadModel(models[i]);
 
     for (int x = 0; x < 3; x++) {
       for (int y = 0; y < 3; y++) {
         for (int z = 0; z < 3; z++) {
-          if (x == 1 && y == 1 && z == 1) {
-            // mid-center cube
-            continue;
-          }
           if ((x == 1 && y == 1) || (x == 1 && z == 1) || (y == 1 && z == 1)) {
             continue;
           }
 
-          Vector3 currentPos = positions[i];
-          Vector3 nextPos =
-              (Vector3){currentPos.x + x * nextCubeSize, currentPos.y + y * nextCubeSize,
-                        currentPos.z + z * nextCubeSize};
           Model cube = LoadModelFromMesh(
               GenMeshCube(nextCubeSize, nextCubeSize, nextCubeSize));
 
-          PushNewCube(nextPos, cube, positions, models, &idx);
+          Vector3 nextPos = (Vector3){(*positions)[i].x, (*positions)[i].y,
+                                      (*positions)[i].z};
+          if (x < 1) {
+            nextPos.x = nextPos.x - nextCubeSize;
+          } else if (x > 1) {
+            nextPos.x = nextPos.x + nextCubeSize;
+          }
+
+          if (y < 1) {
+            nextPos.y = nextPos.y - nextCubeSize;
+          } else if (y > 1) {
+            nextPos.y = nextPos.y + nextCubeSize;
+          }
+
+          if (z < 1) {
+            nextPos.z = nextPos.z - nextCubeSize;
+          } else if (z > 1) {
+            nextPos.z = nextPos.z + nextCubeSize;
+          }
+
+          printf("Generated next position for [%d,%d,%d] cube = [%f,%f,%f].", x,
+                 y, z, nextPos.x, nextPos.y, nextPos.z);
+          PushNewCube(nextPos, cube, nextPositions, nextModels, &idx);
         }
       }
     }
   }
 
+  free(*positions);
+  *positions = NULL;
+  free(*models);
+  *models = NULL;
+  *positions = nextPositions;
+  *models = nextModels;
+
   return idx;
 }
-

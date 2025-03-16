@@ -1,19 +1,51 @@
+#define _AMD64_ 1
 #include "include/raylib.h"
+#include <profileapi.h>
 #include <stdatomic.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
 #define ARRAY_ELEMENTS 10000
 
-int PushNewCube(Vector3 pos, Model model, Vector3 positions[], Model models[],                size_t *idx);
-int GetNextGenCubes(Vector3 **positions, Model **models, size_t *arrayLength,
-                    float nextCubeSize);
+int PushNewCube(Vector3 pos, Model model, Vector3 positions[], Model models[], size_t *idx);
+int GetNextGenCubes(Vector3 **positions, Model **models, size_t *arrayLength, float nextCubeSize);
+#define MS_PER_SEC 1000ULL // MS = milliseconds
+#define US_PER_MS 1000ULL  // US = microseconds
+#define HNS_PER_US 10ULL   // HNS = hundred-nanoseconds (e.g., 1 hns = 100 ns)
+#define NS_PER_US 1000ULL
 
-int main(void) {
+#define HNS_PER_SEC (MS_PER_SEC * US_PER_MS * HNS_PER_US)
+#define NS_PER_HNS (100ULL) // NS = nanoseconds
+#define NS_PER_SEC (MS_PER_SEC * US_PER_MS * NS_PER_US)
+
+int clock_gettime_monotonic(struct timespec *tv)
+{
+  static LARGE_INTEGER ticksPerSec;
+  LARGE_INTEGER ticks;
+
+  if (!ticksPerSec.QuadPart) {
+    QueryPerformanceFrequency(&ticksPerSec);
+    if (!ticksPerSec.QuadPart) {
+      errno = ENOTSUP;
+      return -1;
+    }
+  }
+
+  QueryPerformanceCounter(&ticks);
+
+  tv->tv_sec = (long)(ticks.QuadPart / ticksPerSec.QuadPart);
+  tv->tv_nsec = (long)(((ticks.QuadPart % ticksPerSec.QuadPart) * NS_PER_SEC) / ticksPerSec.QuadPart);
+
+  return 0;
+}
+int main(void)
+{
   setvbuf(stdout, NULL, _IOFBF, 0);
   setvbuf(stdin, NULL, _IOFBF, 0);
   SetConfigFlags(FLAG_MSAA_4X_HINT);
+
   // Initialization
   //--------------------------------------------------------------------------------------
   const int screenWidth = 1024;
@@ -40,14 +72,11 @@ int main(void) {
   short lvlStrLength = 9;
   float cubeSide = 1.0f;
   char *levelInfo = "Level: 0";
-
   size_t idx = 0;
-
   Vector3 *positions = malloc(ARRAY_ELEMENTS * sizeof(Vector3));
   Model *models = malloc(ARRAY_ELEMENTS * sizeof(Model));
 
-  Model cubeModel =
-      LoadModelFromMesh(GenMeshCube(cubeSide, cubeSide, cubeSide));
+  Model cubeModel = LoadModelFromMesh(GenMeshCube(cubeSide, cubeSide, cubeSide));
   PushNewCube(cubePosition, cubeModel, positions, models, &idx);
 
   DisableCursor();
@@ -82,8 +111,7 @@ int main(void) {
       // printf("pos %d: %f:%f:%f \n", i, positions[i].x, positions[i].y,
       // positions[i].z);
       DrawModelEx(models[i], positions[i], vectorZero, 0.0f, vectorOne, YELLOW);
-      DrawModelWiresEx(models[i], positions[i], vectorZero, 0.0f, vectorOne,
-                       BLACK);
+      DrawModelWiresEx(models[i], positions[i], vectorZero, 0.0f, vectorOne, BLACK);
     }
 
     DrawGrid(20, 1.0f);
@@ -106,14 +134,17 @@ int main(void) {
   }
 
   free(levelInfo);
+  free(positions);
+  free(models);
+
   CloseWindow(); // Close window and OpenGL context
   //--------------------------------------------------------------------------------------
 
   return 0;
 }
 
-int PushNewCube(Vector3 pos, Model model, Vector3 positions[], Model models[],
-                size_t *idx) {
+int PushNewCube(Vector3 pos, Model model, Vector3 positions[], Model models[], size_t *idx)
+{
   if ((*idx) + 1 >= ARRAY_ELEMENTS) {
     return 1;
   }
@@ -125,16 +156,14 @@ int PushNewCube(Vector3 pos, Model model, Vector3 positions[], Model models[],
   return 0;
 }
 
-int GetNextGenCubes(Vector3 **positions, Model **models, size_t *arrayLength,
-                    float nextCubeSize) {
-
+int GetNextGenCubes(Vector3 **positions, Model **models, size_t *arrayLength, float nextCubeSize)
+{
   size_t idx = 0;
-
   Vector3 *nextPositions = malloc(ARRAY_ELEMENTS * sizeof(Vector3));
   Model *nextModels = malloc(ARRAY_ELEMENTS * sizeof(Model));
+  Model cube = LoadModelFromMesh(GenMeshCube(nextCubeSize, nextCubeSize, nextCubeSize));
 
   for (int i = 0; i < *arrayLength; i++) {
-
     for (int x = 0; x < 3; x++) {
       for (int y = 0; y < 3; y++) {
         for (int z = 0; z < 3; z++) {
@@ -142,11 +171,8 @@ int GetNextGenCubes(Vector3 **positions, Model **models, size_t *arrayLength,
             continue;
           }
 
-          Model cube = LoadModelFromMesh(
-              GenMeshCube(nextCubeSize, nextCubeSize, nextCubeSize));
+          Vector3 nextPos = (Vector3){(*positions)[i].x, (*positions)[i].y, (*positions)[i].z};
 
-          Vector3 nextPos = (Vector3){(*positions)[i].x, (*positions)[i].y,
-                                      (*positions)[i].z};
           if (x < 1) {
             nextPos.x = nextPos.x - nextCubeSize;
           } else if (x > 1) {
@@ -165,18 +191,21 @@ int GetNextGenCubes(Vector3 **positions, Model **models, size_t *arrayLength,
             nextPos.z = nextPos.z + nextCubeSize;
           }
 
-          printf("Generated next position for [%d,%d,%d] cube = [%f,%f,%f].", x,
-                 y, z, nextPos.x, nextPos.y, nextPos.z);
+          printf("Next position for [%d,%d,%d] cube = [%f,%f,%f].\n", x, y, z, nextPos.x, nextPos.y, nextPos.z);
           PushNewCube(nextPos, cube, nextPositions, nextModels, &idx);
         }
       }
     }
   }
 
+  // for (int i = 0; i < *arrayLength; i++)
+  //  UnloadModel(*models[i]);
+
   free(*positions);
   *positions = NULL;
   free(*models);
   *models = NULL;
+
   *positions = nextPositions;
   *models = nextModels;
 

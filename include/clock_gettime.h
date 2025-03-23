@@ -1,7 +1,11 @@
 #if !defined(_AMD64_) || !defined(_X86_)
 #define _AMD64_ 1
-#define _WIN64 1
 #endif
+
+#include <assert.h>
+#include <profileapi.h>
+#include <sysinfoapi.h>
+#include <winnt.h>
 
 #ifndef __clockid_t_defined
 typedef int clockid_t;
@@ -22,11 +26,6 @@ struct itimerspec {
   struct timespec it_value;    /* Timer expiration */
 };
 #endif
-
-#include <profileapi.h>
-// #include <time.h>
-#include <sysinfoapi.h>
-#include <winnt.h>
 
 #define MS_PER_SEC 1000ULL // MS = milliseconds
 #define US_PER_MS 1000ULL  // US = microseconds
@@ -101,3 +100,13 @@ static inline void timespec_diff(struct timespec *start, struct timespec *end,
     result->tv_nsec = end->tv_nsec - start->tv_nsec;
   }
 }
+
+static inline double get_secs() {
+    struct timespec tp = {0};
+    int ret = clock_gettime(CLOCK_MONOTONIC, &tp);
+    assert(ret == 0);
+    return (double)tp.tv_sec + (double)tp.tv_nsec * 1e-9;
+}
+
+#define PROFILE_BEGIN(secs) (secs) = get_secs();
+#define PROFILE_END(secs, label) printf("%s: %lfsecs\n", (label), get_secs() - (secs));

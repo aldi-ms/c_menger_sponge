@@ -1,4 +1,3 @@
-#define _AMD64_ 1
 #include "include/clock_gettime.h"
 #include "include/raylib.h"
 #include <profileapi.h>
@@ -71,18 +70,21 @@ int main(void)
 
       cubeSide = cubeSide / 3.0f;
 
-      struct timespec tic = {0};
-      clock_gettime(CLOCK_MONOTONIC, &tic);
+      double begin;
+      PROFILE_BEGIN(begin);
+      // struct timespec tic = {0};
+      // clock_gettime(CLOCK_MONOTONIC, &tic);
 
       idx = GetNextGenCubes(&positions, &models, idx, cubeSide);
 
-      struct timespec toc = {0};
-      clock_gettime(CLOCK_MONOTONIC, &toc);
+      PROFILE_END(begin, "GetNextGenCubes");
+      // struct timespec toc = {0};
+      // clock_gettime(CLOCK_MONOTONIC, &toc);
 
-      struct timespec time_diff = {0};
-      timespec_diff(&tic, &toc, &time_diff);
-      printf("Elapsed ns=%ld\n", time_diff.tv_nsec);
-      printf("Elapsed s=%ld\n", time_diff.tv_sec);
+      // struct timespec time_diff = {0};
+      // timespec_diff(&tic, &toc, &time_diff);
+      // printf("Elapsed ns=%ld\n", time_diff.tv_nsec);
+      // printf("Elapsed s=%ld\n", time_diff.tv_sec);
     }
 
     // Draw

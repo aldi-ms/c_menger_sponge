@@ -1,45 +1,20 @@
 #define _AMD64_ 1
+#include "include/clock_gettime.h"
 #include "include/raylib.h"
 #include <profileapi.h>
 #include <stdatomic.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <time.h>
 
-#define ARRAY_ELEMENTS 10000
+#define ARRAY_ELEMENTS 161000
 
 int PushNewCube(Vector3 pos, Model model, Vector3 positions[], Model models[], size_t *idx);
-int GetNextGenCubes(Vector3 **positions, Model **models, size_t *arrayLength, float nextCubeSize);
-#define MS_PER_SEC 1000ULL // MS = milliseconds
-#define US_PER_MS 1000ULL  // US = microseconds
-#define HNS_PER_US 10ULL   // HNS = hundred-nanoseconds (e.g., 1 hns = 100 ns)
-#define NS_PER_US 1000ULL
+int GetNextGenCubes(Vector3 **positions, Model **models, size_t arrayLength, float nextCubeSize);
 
-#define HNS_PER_SEC (MS_PER_SEC * US_PER_MS * HNS_PER_US)
-#define NS_PER_HNS (100ULL) // NS = nanoseconds
-#define NS_PER_SEC (MS_PER_SEC * US_PER_MS * NS_PER_US)
+const float RotationAngle = 0.5f;
+const Vector3 RotationAxis = {0.5f, 0.5f, 0.5f};
 
-int clock_gettime_monotonic(struct timespec *tv)
-{
-  static LARGE_INTEGER ticksPerSec;
-  LARGE_INTEGER ticks;
-
-  if (!ticksPerSec.QuadPart) {
-    QueryPerformanceFrequency(&ticksPerSec);
-    if (!ticksPerSec.QuadPart) {
-      errno = ENOTSUP;
-      return -1;
-    }
-  }
-
-  QueryPerformanceCounter(&ticks);
-
-  tv->tv_sec = (long)(ticks.QuadPart / ticksPerSec.QuadPart);
-  tv->tv_nsec = (long)(((ticks.QuadPart % ticksPerSec.QuadPart) * NS_PER_SEC) / ticksPerSec.QuadPart);
-
-  return 0;
-}
 int main(void)
 {
   setvbuf(stdout, NULL, _IOFBF, 0);
@@ -65,7 +40,7 @@ int main(void)
   cam.position = (Vector3){10.0f, 10.0f, 10.0f};
   cam.target = vectorZero;
   cam.up = (Vector3){0.0f, 1.0f, 0.0f};
-  cam.fovy = 45.0f;
+  cam.fovy = 35.0f;
   cam.projection = CAMERA_PERSPECTIVE;
 
   short level = 0;
@@ -96,7 +71,18 @@ int main(void)
 
       cubeSide = cubeSide / 3.0f;
 
-      idx = GetNextGenCubes(&positions, &models, &idx, cubeSide);
+      struct timespec tic = {0};
+      clock_gettime(CLOCK_MONOTONIC, &tic);
+
+      idx = GetNextGenCubes(&positions, &models, idx, cubeSide);
+
+      struct timespec toc = {0};
+      clock_gettime(CLOCK_MONOTONIC, &toc);
+
+      struct timespec time_diff = {0};
+      timespec_diff(&tic, &toc, &time_diff);
+      printf("Elapsed ns=%ld\n", time_diff.tv_nsec);
+      printf("Elapsed s=%ld\n", time_diff.tv_sec);
     }
 
     // Draw
@@ -107,11 +93,9 @@ int main(void)
 
     BeginMode3D(cam);
 
-    for (int i = 0; i < idx; i++) {
-      // printf("pos %d: %f:%f:%f \n", i, positions[i].x, positions[i].y,
-      // positions[i].z);
-      DrawModelEx(models[i], positions[i], vectorZero, 0.0f, vectorOne, YELLOW);
-      DrawModelWiresEx(models[i], positions[i], vectorZero, 0.0f, vectorOne, BLACK);
+    for (size_t i = 0; i < idx; i++) {
+      DrawModelEx(models[i], positions[i], RotationAxis, RotationAngle, vectorOne, YELLOW);
+      DrawModelWiresEx(models[i], positions[i], RotationAxis, RotationAngle, vectorOne, BLACK);
     }
 
     DrawGrid(20, 1.0f);
@@ -129,7 +113,7 @@ int main(void)
   // De-Initialization
   //--------------------------------------------------------------------------------------
 
-  for (int i = 0; i < idx; i++) {
+  for (size_t i = 0; i < idx; i++) {
     UnloadModel(models[i]);
   }
 
@@ -146,7 +130,7 @@ int main(void)
 int PushNewCube(Vector3 pos, Model model, Vector3 positions[], Model models[], size_t *idx)
 {
   if ((*idx) + 1 >= ARRAY_ELEMENTS) {
-    return 1;
+    return -1;
   }
 
   positions[*idx] = pos;
@@ -156,14 +140,22 @@ int PushNewCube(Vector3 pos, Model model, Vector3 positions[], Model models[], s
   return 0;
 }
 
-int GetNextGenCubes(Vector3 **positions, Model **models, size_t *arrayLength, float nextCubeSize)
+int GetNextGenCubes(Vector3 **positions, Model **models, size_t arrayLength, float nextCubeSize)
 {
-  size_t idx = 0;
   Vector3 *nextPositions = malloc(ARRAY_ELEMENTS * sizeof(Vector3));
   Model *nextModels = malloc(ARRAY_ELEMENTS * sizeof(Model));
+  if (!nextPositions || !nextModels) {
+    free(nextPositions);
+    free(nextModels);
+    return -1;
+  }
+
+  size_t idx = 0;
   Model cube = LoadModelFromMesh(GenMeshCube(nextCubeSize, nextCubeSize, nextCubeSize));
 
-  for (int i = 0; i < *arrayLength; i++) {
+  for (int i = 0; i < arrayLength; i++) {
+    Vector3 basePos = (*positions)[i];
+
     for (int x = 0; x < 3; x++) {
       for (int y = 0; y < 3; y++) {
         for (int z = 0; z < 3; z++) {
@@ -171,35 +163,18 @@ int GetNextGenCubes(Vector3 **positions, Model **models, size_t *arrayLength, fl
             continue;
           }
 
-          Vector3 nextPos = (Vector3){(*positions)[i].x, (*positions)[i].y, (*positions)[i].z};
+          Vector3 nextPos = {basePos.x + (x - 1) * nextCubeSize, basePos.y + (y - 1) * nextCubeSize,
+                             basePos.z + (z - 1) * nextCubeSize};
+          // printf("Next position for [%d,%d,%d] cube = [%f,%f,%f].\n", x, y, z, nextPos.x, nextPos.y, nextPos.z);
 
-          if (x < 1) {
-            nextPos.x = nextPos.x - nextCubeSize;
-          } else if (x > 1) {
-            nextPos.x = nextPos.x + nextCubeSize;
+          if (PushNewCube(nextPos, cube, nextPositions, nextModels, &idx)) {
+            // most probably ARRAY_ELEMENTS overflow
+            return -1;
           }
-
-          if (y < 1) {
-            nextPos.y = nextPos.y - nextCubeSize;
-          } else if (y > 1) {
-            nextPos.y = nextPos.y + nextCubeSize;
-          }
-
-          if (z < 1) {
-            nextPos.z = nextPos.z - nextCubeSize;
-          } else if (z > 1) {
-            nextPos.z = nextPos.z + nextCubeSize;
-          }
-
-          printf("Next position for [%d,%d,%d] cube = [%f,%f,%f].\n", x, y, z, nextPos.x, nextPos.y, nextPos.z);
-          PushNewCube(nextPos, cube, nextPositions, nextModels, &idx);
         }
       }
     }
   }
-
-  // for (int i = 0; i < *arrayLength; i++)
-  //  UnloadModel(*models[i]);
 
   free(*positions);
   *positions = NULL;
@@ -209,5 +184,5 @@ int GetNextGenCubes(Vector3 **positions, Model **models, size_t *arrayLength, fl
   *positions = nextPositions;
   *models = nextModels;
 
-  return idx;
+  return (int)idx;
 }

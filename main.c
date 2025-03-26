@@ -72,19 +72,10 @@ int main(void)
 
       double begin;
       PROFILE_BEGIN(begin);
-      // struct timespec tic = {0};
-      // clock_gettime(CLOCK_MONOTONIC, &tic);
 
       idx = GetNextGenCubes(&positions, &models, idx, cubeSide);
 
       PROFILE_END(begin, "GetNextGenCubes");
-      // struct timespec toc = {0};
-      // clock_gettime(CLOCK_MONOTONIC, &toc);
-
-      // struct timespec time_diff = {0};
-      // timespec_diff(&tic, &toc, &time_diff);
-      // printf("Elapsed ns=%ld\n", time_diff.tv_nsec);
-      // printf("Elapsed s=%ld\n", time_diff.tv_sec);
     }
 
     // Draw
